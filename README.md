@@ -9,6 +9,11 @@ A custom installer for Claude Desktop that includes built-in extensions (and the
 - This project is neither affiliated with nor endorsed by Anthropic
 - You are responsible for ensuring your use complies with all applicable terms and agreements
 
+## Multi-instance (new)
+
+You can now run multiple desktop client instances by just launching the client with --instance [name], eg --instance work.
+Useful if you want to have multiple windows open, or if you have multiple accounts.
+
 ## Known limitations
 
 ### Windows requires admin perms

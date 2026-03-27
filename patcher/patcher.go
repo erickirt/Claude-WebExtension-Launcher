@@ -27,7 +27,7 @@ const (
 	macosReleasesURL   = "https://downloads.claude.ai/releases/darwin/universal/RELEASES.json"
 	appFolderName      = "app-latest"
 	KeepNupkgFiles     = false
-	PatchVersion       = "1"
+	PatchVersion       = "3"
 )
 
 type MacOSManifest struct {
@@ -53,6 +53,13 @@ var supportedVersions = map[string][]Patch{
 			Files: []string{".vite/build/index*.js"},
 			Func: func(content []byte) []byte {
 				return patch_generic(content)
+			},
+		},
+		{
+			// Patch index.pre.js to redirect userData path for instance isolation
+			Files: []string{".vite/build/index.pre*.js"},
+			Func: func(content []byte) []byte {
+				return patch_index_pre(content)
 			},
 		},
 	},
@@ -265,6 +272,31 @@ func readCombinedInjection(version string, filenames []string) (string, error) {
 	return combined.String(), nil
 }
 
+func patch_index_pre(content []byte) []byte {
+	contentStr := string(content)
+
+	// Find "use strict" at top of file
+	useStrictPattern := `"use strict";`
+	idx := strings.Index(contentStr, useStrictPattern)
+	if idx == -1 {
+		fmt.Printf("Warning: Could not find \"use strict\" in index.pre file\n")
+		return content
+	}
+
+	// Load the userData injection
+	injection, err := readInjection("generic", "instance_userdata.js")
+	if err != nil {
+		fmt.Printf("Warning: %v\n", err)
+		return content
+	}
+
+	// Insert after "use strict";
+	insertPos := idx + len(useStrictPattern)
+	contentStr = contentStr[:insertPos] + "\n" + injection + "\n" + contentStr[insertPos:]
+
+	return []byte(contentStr)
+}
+
 func patch_generic(content []byte) []byte {
 	contentStr := string(content)
 
@@ -296,6 +328,26 @@ func patch_generic(content []byte) []byte {
 	} else {
 		fmt.Printf("Warning: Could not detect webView variable, falling back to 'r'\n")
 		webViewVar = "r" // Fallback to common default
+	}
+
+	// Replace requestSingleInstanceLock calls with our wrapper BEFORE injecting
+	// the helper function (which itself contains a requestSingleInstanceLock call)
+	lockPattern := regexp.MustCompile(`\w+\.app\.requestSingleInstanceLock\(\)`)
+	contentStr = lockPattern.ReplaceAllString(contentStr, "__modifiedLock()")
+
+	// Inject instance lock helper function after "use strict"
+	useStrictPattern := `"use strict";`
+	useStrictIdx := strings.Index(contentStr, useStrictPattern)
+	if useStrictIdx != -1 {
+		lockInjection, err := readInjection("generic", "instance_lock.js")
+		if err != nil {
+			fmt.Printf("Warning: %v\n", err)
+		} else {
+			insertPos := useStrictIdx + len(useStrictPattern)
+			contentStr = contentStr[:insertPos] + "\n" + lockInjection + "\n" + contentStr[insertPos:]
+		}
+	} else {
+		fmt.Printf("Warning: Could not find \"use strict\" for lock injection\n")
 	}
 
 	// Load all injection files

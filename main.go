@@ -24,11 +24,12 @@ func init() {
 }
 
 // Version is the current version of the application
-const Version = "2.0.1"
+const Version = "2.0.2"
 
 func main() {
 	// Parse command-line flags
 	forceUpdate := flag.Bool("force-update", false, "Force update to the latest version even if it's not verified compatible")
+	instanceName := flag.String("instance", "modified", "Instance name for separate data directory and lock")
 	flag.Parse()
 
 	fmt.Printf("Claude_WebExtension_Launcher version: %s\n", Version)
@@ -115,13 +116,14 @@ func main() {
 
 	//Clear caches that interfere with extension loading and updates
 	var claudeDataDir string
+	claudeAppName := "Claude-" + *instanceName
 
 	switch runtime.GOOS {
 	case "windows":
-		claudeDataDir = filepath.Join(os.Getenv("APPDATA"), "Claude")
+		claudeDataDir = filepath.Join(os.Getenv("APPDATA"), claudeAppName)
 	case "darwin":
 		home, _ := os.UserHomeDir()
-		claudeDataDir = filepath.Join(home, "Library", "Application Support", "Claude")
+		claudeDataDir = filepath.Join(home, "Library", "Application Support", claudeAppName)
 	}
 
 	if claudeDataDir != "" {
@@ -154,9 +156,11 @@ func main() {
 		claudePath = filepath.Join(patcher.AppFolder, "claude")
 	}
 
+	instanceArg := fmt.Sprintf("--instance=%s", *instanceName)
+
 	if launchClaudeInTerminal {
 		// In developer mode, run Claude in the same terminal to see debug output
-		cmd := exec.Command(claudePath)
+		cmd := exec.Command(claudePath, instanceArg)
 		cmd.Dir = filepath.Dir(claudePath)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -164,7 +168,7 @@ func main() {
 		cmd.Run()
 	} else {
 		// Launch detached
-		cmd := exec.Command(claudePath)
+		cmd := exec.Command(claudePath, instanceArg)
 		cmd.Dir = filepath.Dir(claudePath)
 		cmd.Start()
 	}
