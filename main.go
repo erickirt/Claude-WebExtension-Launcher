@@ -1,7 +1,6 @@
 package main
 
 import (
-	"claude-webext-patcher/extensions"
 	"claude-webext-patcher/patcher"
 	"claude-webext-patcher/selfupdate"
 	"claude-webext-patcher/utils"
@@ -22,12 +21,13 @@ func init() {
 }
 
 // Version is the current version of the application
-const Version = "2.0.2"
+const Version = "2.1.0"
 
 func main() {
 	// Parse command-line flags
 	forceUpdate := flag.Bool("force-update", false, "Force update to the latest version even if it's not verified compatible")
 	instanceName := flag.String("instance", "modified", "Instance name for separate data directory and lock")
+	patcherMode := flag.Bool("patcher", false, "Run in elevated patcher mode (internal)")
 	flag.Parse()
 
 	fmt.Printf("Claude_WebExtension_Launcher version: %s\n", Version)
@@ -37,10 +37,15 @@ func main() {
 	// Set embedded FS for patcher module
 	patcher.EmbeddedFS = EmbeddedFS
 
+	// Patcher mode: do admin work and exit (Windows only)
+	if *patcherMode {
+		os.Exit(runPatcherMode(*forceUpdate))
+	}
+
 	// Handle update completion first
 	selfupdate.FinishUpdateIfNeeded()
 
-	// Platform-specific admin/terminal setup before the main flow
+	// Platform-specific setup before the main flow
 	if err := prepareAdminContext(); err != nil {
 		fmt.Printf("Failed to prepare admin context: %v\n", err)
 		os.Exit(1)
@@ -55,17 +60,16 @@ func main() {
 		// Continue anyway
 	}
 
-	// Ensure app is installed, updated, and patched
-	if err := patcher.EnsurePatched(*forceUpdate); err != nil {
+	// Ensure Claude is patched and extensions are up-to-date.
+	// On Windows this may invoke an elevated patcher subprocess via UAC.
+	// On macOS this runs in-process.
+	if err := ensureClaudeReady(*forceUpdate); err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Update extensions
-	if err := extensions.UpdateAll(); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
+	// Release any platform-specific privileges before launching Claude
+	releaseAdminContext()
 
 	// Clear caches that interfere with extension loading and updates
 	claudeDataDir := claudeUserDataDir(*instanceName)
@@ -79,9 +83,6 @@ func main() {
 		}
 		fmt.Println("Cache cleared successfully")
 	}
-
-	// Release any platform-specific privileges before launching Claude
-	releaseAdminContext()
 
 	// Launch Claude
 	fmt.Println("Launching Claude.")

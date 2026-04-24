@@ -83,6 +83,10 @@ func init() {
 	initPaths()
 }
 
+func InstallBaseDir() string {
+	return installBaseDir
+}
+
 // ForceRedownload deletes the version file and forces a full re-download and re-patch.
 func ForceRedownload() error {
 	claudeVersionFile := filepath.Join(installBaseDir, "claude-version.txt")
@@ -127,7 +131,7 @@ func loadVerifiedVersions() []string {
 }
 
 // Check if a version is verified to work with generic patches
-func isVersionVerified(version string) bool {
+func IsVersionVerified(version string) bool {
 	// Load versions on first use
 	if versionsVerifiedGenericCompatible == nil {
 		versionsVerifiedGenericCompatible = loadVerifiedVersions()
@@ -357,7 +361,7 @@ func EnsurePatched(forceUpdate bool) error {
 	}
 
 	// Get latest version and download URL
-	newestVersion, downloadURL, err := getLatestVersion()
+	newestVersion, downloadURL, err := GetLatestVersion()
 	if err != nil {
 		// If we have an existing installation, continue using it
 		if currentVersion != "" {
@@ -378,7 +382,7 @@ func EnsurePatched(forceUpdate bool) error {
 	fmt.Printf("Latest version: %s\n", newestVersion)
 
 	// Check if version is verified
-	versionVerified := isVersionVerified(newestVersion)
+	versionVerified := IsVersionVerified(newestVersion)
 
 	// Decide whether to update based on verification status and existing installation
 	shouldUpdate := false

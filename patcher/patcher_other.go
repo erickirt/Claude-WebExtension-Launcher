@@ -116,7 +116,7 @@ func replacePlatformAppIcon() {
 	}
 }
 
-func getLatestVersion() (string, string, error) {
+func GetLatestVersion() (string, string, error) {
 	fmt.Println("Getting latest version for OS: darwin")
 
 	// Parse macOS manifest

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"claude-webext-patcher/extensions"
 	"claude-webext-patcher/patcher"
 	"fmt"
 	"os"
@@ -53,4 +54,18 @@ func claudeExecutablePath() string {
 	}
 	// Linux and other Unix-like systems
 	return filepath.Join(patcher.AppFolder, "claude")
+}
+
+// ensureClaudeReady runs patching and extension updates in-process on macOS.
+func ensureClaudeReady(forceUpdate bool) error {
+	if err := patcher.EnsurePatched(forceUpdate); err != nil {
+		return err
+	}
+	return extensions.UpdateAll()
+}
+
+// runPatcherMode is not used on non-Windows platforms.
+func runPatcherMode(forceUpdate bool) int {
+	fmt.Println("--patcher is not supported on this platform")
+	return 1
 }

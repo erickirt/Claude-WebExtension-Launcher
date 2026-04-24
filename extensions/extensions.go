@@ -24,6 +24,61 @@ var extensions = []Extension{
 	{Owner: "lugia19", Repo: "Claude-Toolbox", Folder: "userscript-toolbox"},
 }
 
+type extensionRelease struct {
+	TagName string `json:"tag_name"`
+	Assets  []struct {
+		Name        string `json:"name"`
+		DownloadURL string `json:"browser_download_url"`
+	} `json:"assets"`
+}
+
+func getInstalledVersion(ext Extension) string {
+	manifestPath := filepath.Join(utils.ResolveInstallPath("web-extensions"), ext.Folder, "manifest.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return ""
+	}
+	var manifest struct {
+		Version string `json:"version"`
+	}
+	if json.Unmarshal(data, &manifest) == nil {
+		return manifest.Version
+	}
+	return ""
+}
+
+func fetchLatestRelease(ext Extension) (*extensionRelease, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", ext.Owner, ext.Repo)
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var release extensionRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return nil, err
+	}
+	return &release, nil
+}
+
+// NeedsUpdate checks whether any extension has a newer version available
+// without downloading anything. Used by the unelevated launcher to decide
+// whether to invoke the elevated patcher.
+func NeedsUpdate() bool {
+	for _, ext := range extensions {
+		currentVersion := getInstalledVersion(ext)
+		release, err := fetchLatestRelease(ext)
+		if err != nil {
+			continue
+		}
+		releaseVersion := strings.TrimPrefix(release.TagName, "v")
+		if compareVersions(currentVersion, releaseVersion) < 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func UpdateAll() error {
 	fmt.Println("Checking extensions...")
 
@@ -31,42 +86,16 @@ func UpdateAll() error {
 	os.MkdirAll(utils.ResolveInstallPath("web-extensions"), 0755)
 
 	for _, ext := range extensions {
-		// Check current version
-		manifestPath := filepath.Join(utils.ResolveInstallPath("web-extensions"), ext.Folder, "manifest.json")
-		currentVersion := ""
+		currentVersion := getInstalledVersion(ext)
 
-		if data, err := os.ReadFile(manifestPath); err == nil {
-			var manifest struct {
-				Version string `json:"version"`
-			}
-			if json.Unmarshal(data, &manifest) == nil {
-				currentVersion = manifest.Version
-			}
-		}
-
-		// Get latest release from GitHub
-		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", ext.Owner, ext.Repo)
-		resp, err := http.Get(url)
+		release, err := fetchLatestRelease(ext)
 		if err != nil {
 			fmt.Printf("  %s: error checking: %v\n", ext.Folder, err)
 			continue
 		}
 
-		var release struct {
-			TagName string `json:"tag_name"`
-			Assets  []struct {
-				Name        string `json:"name"`
-				DownloadURL string `json:"browser_download_url"`
-			} `json:"assets"`
-		}
-
-		json.NewDecoder(resp.Body).Decode(&release)
-		resp.Body.Close()
-
-		// Check if update needed
 		releaseVersion := strings.TrimPrefix(release.TagName, "v")
 
-		// Check if update needed
 		if compareVersions(currentVersion, releaseVersion) >= 0 {
 			fmt.Printf("  %s: up to date (%s)\n", ext.Folder, currentVersion)
 			continue

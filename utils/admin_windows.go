@@ -13,6 +13,11 @@ import (
 var (
 	shell32             = syscall.NewLazyDLL("shell32.dll")
 	procShellExecuteExW = shell32.NewProc("ShellExecuteExW")
+
+	kernel32                = syscall.NewLazyDLL("kernel32.dll")
+	procWaitForSingleObject = kernel32.NewProc("WaitForSingleObject")
+	procGetExitCodeProcess  = kernel32.NewProc("GetExitCodeProcess")
+	procCloseHandle         = kernel32.NewProc("CloseHandle")
 )
 
 type shellExecuteInfo struct {
@@ -72,4 +77,35 @@ func RelaunchAsAdmin() error {
 	}
 
 	return nil
+}
+
+// RunElevatedAndWait launches the given executable elevated via UAC and waits
+// for it to exit. Returns the process exit code.
+func RunElevatedAndWait(exe string, args string) (int, error) {
+	verb, _ := syscall.UTF16PtrFromString("runas")
+	file, _ := syscall.UTF16PtrFromString(exe)
+	params, _ := syscall.UTF16PtrFromString(args)
+
+	sei := shellExecuteInfo{
+		fMask:        0x00000040, // SEE_MASK_NOCLOSEPROCESS
+		lpVerb:       verb,
+		lpFile:       file,
+		lpParameters: params,
+		nShow:        1, // SW_SHOWNORMAL
+	}
+	sei.cbSize = uint32(unsafe.Sizeof(sei))
+
+	ret, _, err := procShellExecuteExW.Call(uintptr(unsafe.Pointer(&sei)))
+	if ret == 0 {
+		return -1, fmt.Errorf("ShellExecuteEx failed: %v", err)
+	}
+
+	// Wait for the elevated process to finish
+	procWaitForSingleObject.Call(sei.hProcess, 0xFFFFFFFF) // INFINITE
+
+	var exitCode uint32
+	procGetExitCodeProcess.Call(sei.hProcess, uintptr(unsafe.Pointer(&exitCode)))
+	procCloseHandle.Call(sei.hProcess)
+
+	return int(exitCode), nil
 }

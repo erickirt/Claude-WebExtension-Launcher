@@ -138,12 +138,21 @@ func finalizePatches() error {
 	return nil
 }
 
+// GrantUserReadAccess grants BUILTIN\Users read/execute on the install directory
+// so the unelevated launcher can read version files and execute claude.exe.
+func GrantUserReadAccess() {
+	cmd := exec.Command("icacls", installBaseDir, "/grant:r", "*S-1-5-32-545:(OI)(CI)RX")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		fmt.Printf("Warning: failed to grant user read access: %v\n%s\n", err, string(output))
+	}
+}
+
 func replacePlatformAppIcon() {
 	// Skip exe icon replacement to preserve code signature
 	fmt.Println("  Skipping exe icon replacement (preserving signature)")
 }
 
-func getLatestVersion() (string, string, error) {
+func GetLatestVersion() (string, string, error) {
 	fmt.Println("Getting latest version for OS: windows")
 
 	resp, err := http.Get(windowsReleasesURL)
