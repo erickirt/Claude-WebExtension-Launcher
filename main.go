@@ -10,8 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
-	"strings"
 )
 
 var launchClaudeInTerminal = false
@@ -42,59 +40,14 @@ func main() {
 	// Handle update completion first
 	selfupdate.FinishUpdateIfNeeded()
 
-	// On Windows, ensure we're running as admin (needed for WindowsApps folder setup).
-	// We use programmatic elevation instead of a manifest so the self-update flow works.
-	if runtime.GOOS == "windows" && !utils.IsAdmin() {
-		fmt.Println("Requesting administrator privileges...")
-		if err := utils.RelaunchAsAdmin(); err != nil {
-			fmt.Printf("Failed to elevate: %v\n", err)
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-
-	// Take ownership of WindowsApps early so all subsequent operations can access it
-	if runtime.GOOS == "windows" {
-		if err := patcher.TakeWindowsAppsOwnership(); err != nil {
-			fmt.Printf("Warning: failed to take WindowsApps ownership: %v\n", err)
-		}
-	}
-
-	// On macOS, if not running in terminal, relaunch in Terminal.app
-	if runtime.GOOS == "darwin" && os.Getenv("TERM") == "" {
-		executable, _ := os.Executable()
-		execDir := filepath.Dir(executable)
-
-		// Change to the executable's directory, run, then exit terminal
-		// Escape single quotes in paths for AppleScript
-		execDirEscaped := strings.ReplaceAll(execDir, `'`, `'\''`)
-		executableEscaped := strings.ReplaceAll(executable, `'`, `'\''`)
-		script := fmt.Sprintf(`tell application "Terminal"
-			set newTab to do script "cd '%s' && '%s' && exit"
-			activate
-		end tell`, execDirEscaped, executableEscaped)
-
-		cmd := exec.Command("osascript", "-e", script)
-		cmd.Start()
-		os.Exit(0)
+	// Platform-specific admin/terminal setup before the main flow
+	if err := prepareAdminContext(); err != nil {
+		fmt.Printf("Failed to prepare admin context: %v\n", err)
+		os.Exit(1)
 	}
 
 	fmt.Println("Claude WebExtension Launcher starting...")
 	fmt.Printf("Version: %s\n", Version)
-
-	// Clean up old installation files next to the executable (from before the move to WindowsApps)
-	if runtime.GOOS == "windows" {
-		execDir := utils.GetExecutableDir()
-		for _, oldDir := range []string{"app-latest", "web-extensions"} {
-			oldPath := filepath.Join(execDir, oldDir)
-			if _, err := os.Stat(oldPath); err == nil {
-				fmt.Printf("Removing old %s from launcher directory...\n", oldDir)
-				if err := os.RemoveAll(oldPath); err != nil {
-					fmt.Printf("Warning: could not remove %s: %v\n", oldPath, err)
-				}
-			}
-		}
-	}
 
 	// Check for self-updates
 	if err := selfupdate.CheckAndUpdate(); err != nil {
@@ -114,18 +67,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	//Clear caches that interfere with extension loading and updates
-	var claudeDataDir string
-	claudeAppName := "Claude-" + *instanceName
-
-	switch runtime.GOOS {
-	case "windows":
-		claudeDataDir = filepath.Join(os.Getenv("APPDATA"), claudeAppName)
-	case "darwin":
-		home, _ := os.UserHomeDir()
-		claudeDataDir = filepath.Join(home, "Library", "Application Support", claudeAppName)
-	}
-
+	// Clear caches that interfere with extension loading and updates
+	claudeDataDir := claudeUserDataDir(*instanceName)
 	if claudeDataDir != "" {
 		cacheDirs := []string{"Service Worker", "WebStorage", "Cache", "Code Cache"}
 		fmt.Printf("Clearing cache folders:\n")
@@ -137,25 +80,12 @@ func main() {
 		fmt.Println("Cache cleared successfully")
 	}
 
-	// Release WindowsApps permissions before launching Claude
-	if runtime.GOOS == "windows" {
-		patcher.ReleaseWindowsAppsOwnership()
-	}
+	// Release any platform-specific privileges before launching Claude
+	releaseAdminContext()
 
 	// Launch Claude
 	fmt.Println("Launching Claude.")
-	var claudePath string
-	switch runtime.GOOS {
-	case "windows":
-		claudePath = filepath.Join(patcher.AppFolder, "claude.exe")
-	case "darwin":
-		// macOS app bundle structure
-		claudePath = filepath.Join(patcher.AppFolder, "Claude.app", "Contents", "MacOS", "Claude")
-	default:
-		// Linux and other Unix-like systems
-		claudePath = filepath.Join(patcher.AppFolder, "claude")
-	}
-
+	claudePath := claudeExecutablePath()
 	instanceArg := fmt.Sprintf("--instance=%s", *instanceName)
 
 	if launchClaudeInTerminal {
