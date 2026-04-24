@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Sentinel Extension",
+  "version": "1.0",
+  "description": "Internal sentinel for verifying content script execution",
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*", "https://*.claude.ai/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

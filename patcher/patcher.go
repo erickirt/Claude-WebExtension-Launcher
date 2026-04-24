@@ -23,7 +23,7 @@ const (
 	macosReleasesURL   = "https://downloads.claude.ai/releases/darwin/universal/RELEASES.json"
 	appFolderName      = "app-latest"
 	KeepNupkgFiles     = false
-	PatchVersion       = "3"
+	PatchVersion       = "4"
 )
 
 type MacOSManifest struct {
@@ -143,6 +143,24 @@ func IsVersionVerified(version string) bool {
 		}
 	}
 	return false
+}
+
+func DeploySentinelExtension() error {
+	sentinelDir := filepath.Join(utils.ResolveInstallPath("web-extensions"), "sentinel")
+	os.MkdirAll(sentinelDir, 0755)
+
+	for _, name := range []string{"manifest.json", "content.js"} {
+		data, err := EmbeddedFS.ReadFile("resources/sentinel_extension/" + name)
+		if err != nil {
+			return fmt.Errorf("reading embedded sentinel file %s: %v", name, err)
+		}
+		if err := os.WriteFile(filepath.Join(sentinelDir, name), data, 0644); err != nil {
+			return fmt.Errorf("writing sentinel file %s: %v", name, err)
+		}
+	}
+
+	fmt.Println("Deployed sentinel extension.")
+	return nil
 }
 
 // Patch functions

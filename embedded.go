@@ -3,6 +3,7 @@ package main
 import "embed"
 
 //go:embed resources/injections/*/*.js
+//go:embed resources/sentinel_extension/*
 //go:embed resources/icons/*
 //go:embed resources/rcedit.exe
 //go:embed resources/version.dll

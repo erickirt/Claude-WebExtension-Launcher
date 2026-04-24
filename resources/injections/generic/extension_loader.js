@@ -23,6 +23,13 @@ while (currentPath !== CUTpath.dirname(currentPath)) {
     }
 }
 
+// Sentinel reload tracking
+let sentinelReloadCount = 0;
+const SENTINEL_MAX_RELOADS = 2;
+const SENTINEL_TIMEOUT_MS = 5000;
+const SENTINEL_STRING = "SENTINEL_EXT_LOADED";
+let sentinelReceived = false;
+
 // Load extensions and await them before page navigation
 if (extPath) {
     const extDirs = CUTfs.readdirSync(extPath).filter(f =>
@@ -44,16 +51,41 @@ if (extPath) {
             console.log(`Extensions loaded: ${loaded}/${extDirs.length}`);
             if (loaded < extDirs.length) {
                 console.log('Not all extensions loaded, reloading page...');
+                sentinelReloadCount++;
                 CUTwebView.webContents.reloadIgnoringCache();
             }
         });
     }
 }
 
-//Generic logging function
+// Logging + sentinel detection
 CUTwebView.webContents.on('console-message', (event) => {
-    const message = event.message
+    const message = event.message;
     if (message.startsWith("EXT_LOG:")) {
-        console.log(message)
+        console.log(message);
+        if (message.includes(SENTINEL_STRING)) {
+            sentinelReceived = true;
+            console.log('[Sentinel] Content script execution confirmed.');
+        }
     }
 });
+
+// Sentinel watchdog — check that content scripts executed, retry up to SENTINEL_MAX_RELOADS times
+const hasSentinelExtension = extPath && CUTfs.existsSync(CUTpath.join(extPath, 'sentinel', 'manifest.json'));
+if (hasSentinelExtension) {
+    function checkSentinel() {
+        setTimeout(() => {
+            if (sentinelReceived) return;
+            if (sentinelReloadCount < SENTINEL_MAX_RELOADS) {
+                sentinelReloadCount++;
+                console.log(`[Sentinel] Content scripts did not execute within ${SENTINEL_TIMEOUT_MS}ms. Reloading (attempt ${sentinelReloadCount}/${SENTINEL_MAX_RELOADS})...`);
+                sentinelReceived = false;
+                CUTwebView.webContents.reloadIgnoringCache();
+                checkSentinel();
+            } else {
+                console.log(`[Sentinel] Content scripts still not executing after ${SENTINEL_MAX_RELOADS} reloads. Giving up.`);
+            }
+        }, SENTINEL_TIMEOUT_MS);
+    }
+    checkSentinel();
+}

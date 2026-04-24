@@ -64,6 +64,10 @@ func runPatcherMode(forceUpdate bool) int {
 		fmt.Printf("Warning: extension update failed: %v\n", err)
 	}
 
+	if err := patcher.DeploySentinelExtension(); err != nil {
+		fmt.Printf("Warning: sentinel extension deployment failed: %v\n", err)
+	}
+
 	patcher.GrantUserReadAccess()
 	patcher.ReleaseWindowsAppsOwnership()
 

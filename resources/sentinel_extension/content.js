@@ -1,0 +1,1 @@
+console.log("EXT_LOG:SENTINEL_EXT_LOADED");

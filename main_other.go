@@ -61,7 +61,13 @@ func ensureClaudeReady(forceUpdate bool) error {
 	if err := patcher.EnsurePatched(forceUpdate); err != nil {
 		return err
 	}
-	return extensions.UpdateAll()
+	if err := extensions.UpdateAll(); err != nil {
+		return err
+	}
+	if err := patcher.DeploySentinelExtension(); err != nil {
+		fmt.Printf("Warning: sentinel extension deployment failed: %v\n", err)
+	}
+	return nil
 }
 
 // runPatcherMode is not used on non-Windows platforms.
