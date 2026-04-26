@@ -16,8 +16,8 @@ Useful if you want to have multiple windows open, or if you have multiple accoun
 
 ## Known limitations
 
-### Login requires using a code
-The modified client is not registered to handle Claude's magic links, so clicking the login link in your email will open the official client (or just not work if you don't have it installed). When logging in, use the **"Use a login code instead"** option to log in with a one-time code.
+### Multi-instance login requires using a code
+When using `--instance` to run additional instances, those instances are not registered to handle Claude's magic links. When logging in to a non-default instance, use the **"Use a login code instead"** option to log in with a one-time code.
 
 ### Windows requires admin perms
 This is to make Cowork function. The app will block cowork if the application is not inside of C:\Program Files\WindowsApps, which requires admin permissions to be written to and read from.

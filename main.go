@@ -71,6 +71,9 @@ func main() {
 	// Release any platform-specific privileges before launching Claude
 	releaseAdminContext()
 
+	// Check for official Claude MSIX installation (Windows only)
+	checkMSIXAndPrompt(*instanceName)
+
 	// Clear caches that interfere with extension loading and updates
 	claudeDataDir := claudeUserDataDir(*instanceName)
 	if claudeDataDir != "" {
